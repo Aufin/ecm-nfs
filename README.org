@@ -1,0 +1,335 @@
+#+TITLE: NFS server for central storage + cloud references
+
+Based off of the [[https://github.com/trejo08/nfs-server][trejo08]] NFS server this is the NFS server used
+internally by ECM.
+
+High-performance NFS server Docker image optimized for Kubernetes
+deployments, designed to significantly reduce startup time and provide
+reliable shared storage for containerized applications.
+
+* 🚀 Key Features
+:PROPERTIES:
+:CUSTOM_ID: key-features
+:END:
+- *⚡ 3x Faster Startup*: Reduced from ~90s to ~30s with precompiled
+  utilities
+- *🔧 Precompiled*: All NFS utilities included in the image for instant
+  startup
+- *🌐 Cross-platform*: Built for linux/amd64 (Kubernetes compatible)
+- *🛠️ Dynamic Configuration*: Runtime configuration via =NFS_EXPORT_DIR=
+  environment variable
+- *✅ Version Compatible*: Resolved "Unsupported version" errors for
+  maximum client compatibility
+- *📦 Production Ready*: Tested in production environments with high
+  availability
+
+* 📦 Podman Image
+:PROPERTIES:
+:CUSTOM_ID: docker-image
+:END:
+
+*Public Registry*: [[https://hub.docker.com/repository/docker/aufin/nfs-server/general][DockerHub]]
+
+#+begin_src sh
+# Latest version
+podman pull aufin/nfs-server:latest
+#+end_src
+
+* 🔧 Configuration
+:PROPERTIES:
+:CUSTOM_ID: configuration
+:END:
+** Environment Variables
+:PROPERTIES:
+:CUSTOM_ID: environment-variables
+:END:
+| Variable         | Description                 | Default         | Example           |
+|------------------+-----------------------------+-----------------+-------------------|
+| =NFS_EXPORT_DIR= | Directory to export via NFS | =/exports/data= | =/exports/shared= |
+
+** Exposed Ports
+:PROPERTIES:
+:CUSTOM_ID: exposed-ports
+:END:
+| Port    | Protocol | Service        |
+|---------+----------+----------------|
+| =2049=  | TCP      | NFS            |
+| =111=   | TCP      | RPC portmapper |
+| =20048= | TCP      | mountd         |
+
+* 🐳 Podman Usage
+:PROPERTIES:
+:CUSTOM_ID: podman-usage
+:END:
+** Basic Usage
+:PROPERTIES:
+:CUSTOM_ID: basic-usage
+:END:
+#+begin_src sh
+podman run --privileged -p 2049:2049 -p 111:111 -p 20048:20048 \
+  trejo08/nfs-server:v1.1.0
+#+end_src
+
+** Custom Configuration
+:PROPERTIES:
+:CUSTOM_ID: custom-configuration
+:END:
+#+begin_src sh
+podman run --privileged \
+  -p 2049:2049 -p 111:111 -p 20048:20048 \
+  -e NFS_EXPORT_DIR="/exports/myapp" \
+  trejo08/nfs-server:v1.1.0
+#+end_src
+
+** With Persistent Volume
+:PROPERTIES:
+:CUSTOM_ID: with-persistent-volume
+:END:
+#+begin_src sh
+podman run --privileged \
+  -p 2049:2049 -p 111:111 -p 20048:20048 \
+  -v /host/data:/exports \
+  trejo08/nfs-server:v1.1.0
+#+end_src
+
+* ☸️ Kubernetes Usage
+:PROPERTIES:
+:CUSTOM_ID: kubernetes-usage
+:END:
+** Basic Deployment
+:PROPERTIES:
+:CUSTOM_ID: basic-deployment
+:END:
+#+begin_src yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nfs-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nfs-server
+  template:
+    metadata:
+      labels:
+        app: nfs-server
+    spec:
+      containers:
+      - name: nfs-server
+        image: aufin/nfs-server:latest
+        env:
+        - name: NFS_EXPORT_DIR
+          value: "/exports/shared"
+        securityContext:
+          privileged: true
+        ports:
+        - containerPort: 2049
+        - containerPort: 111
+        - containerPort: 20048
+#+end_src
+
+** PersistentVolume Configuration
+:PROPERTIES:
+:CUSTOM_ID: persistentvolume-configuration
+:END:
+#+begin_src yaml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: shared-pv
+spec:
+  capacity:
+    storage: 20Gi
+  accessModes:
+    - ReadWriteMany
+  nfs:
+    server: nfs-server.default.svc.cluster.local
+    path: "/shared"
+#+end_src
+
+* 🏗️ Building from Source
+:PROPERTIES:
+:CUSTOM_ID: building-from-source
+:END:
+
+#+begin_src sh
+  make
+#+end_src
+
+** Publishing to DockerHub
+:PROPERTIES:
+:CUSTOM_ID: publishing-to-dockerhub
+:END:
+#+begin_src sh
+  # Login to DockerHub
+  podman login
+
+  make push
+#+end_src
+
+* 🔍 Troubleshooting
+:PROPERTIES:
+:CUSTOM_ID: troubleshooting
+:END:
+** Normal Startup Logs
+:PROPERTIES:
+:CUSTOM_ID: normal-startup-logs
+:END:
+#+begin_example
+🚀 Starting NFS Server...
+📁 Export directory: /exports/shared
+📁 NFS exports /exports with subdirectory: shared
+📝 Starting rpcbind...
+📝 Starting rpc.mountd...
+📝 Starting rpc.nfsd...
+📝 Exporting filesystems...
+exporting *:/exports
+✅ NFS Server ready!
+📁 Exported: /exports (with subdirectory: shared)
+🔗 NFSv4.1 server listening on port 2049
+💡 Mount path: server:/shared
+🔍 Starting filesystem monitoring for /exports/shared...
+#+end_example
+
+** Common Issues
+:PROPERTIES:
+:CUSTOM_ID: common-issues
+:END:
+*** 1. Port Already in Use
+:PROPERTIES:
+:CUSTOM_ID: port-already-in-use
+:END:
+#+begin_src sh
+# Error: bind: address already in use
+# Solution: Change ports or stop conflicting service
+podman run -p 12049:2049 -p 1111:111 -p 12048:20048 ...
+#+end_src
+
+*** 2. Insufficient Privileges
+:PROPERTIES:
+:CUSTOM_ID: insufficient-privileges
+:END:
+#+begin_src sh
+# Error: operation not permitted
+# Solution: Use --privileged flag
+podman run --privileged ...
+#+end_src
+
+** Verification
+:PROPERTIES:
+:CUSTOM_ID: verification
+:END:
+*** From Host
+:PROPERTIES:
+:CUSTOM_ID: from-host
+:END:
+#+begin_src sh
+# Check available exports
+showmount -e localhost
+
+# Mount NFS (Linux/macOS)
+sudo mount -t nfs localhost:/shared /mnt/test
+#+end_src
+
+*** From Another Container
+:PROPERTIES:
+:CUSTOM_ID: from-another-container
+:END:
+#+begin_src sh
+# Create test container
+podman run --rm -it alpine:3.19 sh
+
+# Inside the container
+apk add nfs-utils
+mkdir /mnt/test
+mount -t nfs host.podman.internal:/shared /mnt/test
+#+end_src
+
+* 📋 Changelog
+:PROPERTIES:
+:CUSTOM_ID: changelog
+:END:
+** v1.1.0 (Current)
+:PROPERTIES:
+:CUSTOM_ID: v1.1.0-current
+:END:
+- 🔍 *NEW FEATURE*: Filesystem monitoring with inotifywait
+- 📊 Real-time logging of file operations (create, delete, modify, move,
+  attrib)
+- 🛠️ Enhanced debugging capabilities for NFS operations
+- 📝 Timestamped logs with event details
+- 🚦 Graceful shutdown handling for monitoring process
+
+** v1.0.4
+:PROPERTIES:
+:CUSTOM_ID: v1.0.4
+:END:
+- ✅ *CRITICAL FIX*: Removed NFS version restrictions
+- ✅ Fixed "Unsupported version" errors
+- ✅ Maximum compatibility with NFS clients
+
+** v1.0.3
+:PROPERTIES:
+:CUSTOM_ID: v1.0.3
+:END:
+- ❌ Had "Unsupported version" issues
+- ⚡ First functional precompiled version
+
+** v1.0.2
+:PROPERTIES:
+:CUSTOM_ID: v1.0.2
+:END:
+- 🔧 Configuration adjustments
+
+** v1.0.1
+:PROPERTIES:
+:CUSTOM_ID: v1.0.1
+:END:
+- 🐛 Minor bug fixes
+
+** v1.0.0
+:PROPERTIES:
+:CUSTOM_ID: v1.0.0
+:END:
+- 🎉 First precompiled version
+- ⚡ Startup time optimization
+
+* 🤝 Contributing
+:PROPERTIES:
+:CUSTOM_ID: contributing
+:END:
+1. Fork the repository
+2. Create feature branch: =git checkout -b feature/new-feature=
+3. Commit changes: =git commit -am 'Add new feature'=
+4. Push to branch: =git push origin feature/new-feature=
+5. Create Pull Request
+
+* 📄 License
+:PROPERTIES:
+:CUSTOM_ID: license
+:END:
+This project is open source and available under the MIT License.
+
+* ⭐ Star Us
+:PROPERTIES:
+:CUSTOM_ID: star-us
+:END:
+If you find this project useful, please consider giving it a star on
+GitHub! It helps others discover this optimized NFS solution.
+
+--------------
+
+*Built with ❤️ for the open source community*
+
+* Forked
+
+
+#+begin_src sh
+  git remote add -f trejo08 git@github.com:trejo08/nfs-server.git
+  git subtree add --prefix trejo08 --squash trejo08 main 
+  git mv -f trejo08/* .
+  git mv -f Dockerfile Containerfile
+  pandoc -t org README.md >> README.org
+#+end_src
+
